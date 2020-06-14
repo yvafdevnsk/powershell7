@@ -19,6 +19,35 @@
 # ・拡張子は小文字に統一する。"jpeg" は "jpg" に変更する。
 #
 
+function Get-SubList {
+  <#
+    .Description
+    引数のリストの部分リストを取得する。
+
+    $SrcList 部分リストを取得するリスト
+    $FromIndex 開始インデックス(このインデックスを含む)
+    $ToIndex 終了インデックス(このインデックスを含まない)
+  #>
+  param($SrcList, [int32]$FromIndex, [int32]$ToIndex)
+
+  if (
+    ($FromIndex -lt 0) -or
+    (($SrcList.Count - 1) -lt $FromIndex) -or
+    ($ToIndex -lt 0) -or
+    ($SrcList.Count -lt $ToIndex) -or
+    ($ToIndex -lt $FromIndex)
+  ) {
+    throw "IllegalArgument SrcList.Count[$($SrcList.Count)] FromIndex[$($FromIndex)] ToIndex[$($ToIndex)]"
+  }
+
+  $SubList = @()
+  for ($i = $FromIndex; $i -lt $ToIndex; $i++) {
+    $SubList += $SrcList[$i]
+  }
+
+  $SubList
+}
+
 function Get-RenameFileNameList {
   <#
     .Description
@@ -69,7 +98,8 @@ function Get-RenameFileNameList {
   #   20200614_01 ～ 20200614_99
   #   20200615_01 ～ 20200615_10
   if ($NumberOfLimitOfLastDay -ne 0) {
-    $FileNameList = $FileNameList[0..(($FileNameList.Length - 1) - ($NumberOfLimitOfDay - $NumberOfLimitOfLastDay))]
+    $LastIndex = ($FileNameList.Count - 1) - ($NumberOfLimitOfDay - $NumberOfLimitOfLastDay)
+    $FileNameList = Get-SubList -SrcList $FileNameList -FromIndex 0 -ToIndex ($LastIndex + 1)
   }
 
   # 戻り値
@@ -121,6 +151,12 @@ function Rename-TemporaryFileName {
 $FileList = Get-ChildItem -Path .\* -Include *.jpg,*.jpeg,*.png
 "1 FileList.Count=" + $FileList.Count
 
+if ($FileList.Count -eq 0) {
+  "No files."
+  "Abort."
+  exit
+}
+
 # 重複したファイルが存在する場合は処理を中断する。
 $FileHashMap1 = @{}
 foreach ($File in $FileList) {
@@ -145,12 +181,13 @@ if ($FileList.Count -ne $FileHashMap1.Count) {
 Rename-TemporaryFileName -FileList $FileList
 
 # リネームする新しいファイル名を生成する。
-$RenameFileNameList = Get-RenameFileNameList -Count $FileList.Count
+# ・要素が1つの場合でも強制的に配列として扱う。
+$RenameFileNameList = @(Get-RenameFileNameList -Count $FileList.Count)
 
 # カレントディレクトリの画像ファイルを再取得してファイル名をリネームする。
 $FileList = Get-ChildItem -Path .\* -Include *.jpg,*.png
 "2 FileList.Count=" + $FileList.Count
-for ($i = 0; $i -lt $FileList.Length; $i++) {
+for ($i = 0; $i -lt $FileList.Count; $i++) {
   $FileExtension = Split-Path -Path $FileList[$i].FullName -Extension
   $FileList[$i] | Rename-Item -NewName "$($RenameFileNameList[$i])$($FileExtension)"
 }
